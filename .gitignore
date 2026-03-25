@@ -1,0 +1,19 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+appsettings.Development.json
+
+# Next.js
+fe/my-app/.next/
+fe/my-app/node_modules/
+fe/my-app/.env.local
+fe/my-app/.env*.local
+
+# Docker
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
