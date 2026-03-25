@@ -4,11 +4,19 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Api.Data;
 using Api.Services;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// Allow large file uploads
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+{
+    o.MultipartBodyLengthLimit = 52428800; // 50MB
+});
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 52428800);
 
 // Swagger configuration with JWT support
 builder.Services.AddSwaggerGen(c =>
@@ -88,6 +96,14 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseCors("AllowAll");
+
+var wwwroot = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+Directory.CreateDirectory(wwwroot);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(wwwroot),
+    RequestPath = ""
+});
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

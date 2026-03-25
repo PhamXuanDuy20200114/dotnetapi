@@ -16,10 +16,6 @@ namespace Api.Models.Product
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public Category Category { get; set; } = null!;
-        public ICollection<ProductSize> Sizes { get; set; } = new List<ProductSize>();
-        public ICollection<ProductColor> Colors { get; set; } = new List<ProductColor>();
-        public ICollection<ProductType> Types { get; set; } = new List<ProductType>();
-        public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
-        public ICollection<ProductVariant> Variants { get; set; } = new List<ProductVariant>();
+        public ICollection<ProductDetail> Details { get; set; } = new List<ProductDetail>();
     }
 }

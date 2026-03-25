@@ -34,11 +34,13 @@ namespace Api.Controllers.Auth
             {
                 Username = dto.Username,
                 Email = dto.Email,
-                Password = BCrypt.Net.BCrypt.HashPassword(dto.Password)
+                Password = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                PhoneNumber = dto.PhoneNumber,
+                DateOfBirth = dto.DateOfBirth
             };
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
-            return Ok(new UserResponseDto { Id = user.Id, Username = user.Username, Email = user.Email });
+            return Ok(new UserResponseDto { Id = user.Id, Username = user.Username, Email = user.Email, PhoneNumber = user.PhoneNumber, DateOfBirth = user.DateOfBirth, Permissions = new List<string>() });
         }
 
         [HttpPost("login")]

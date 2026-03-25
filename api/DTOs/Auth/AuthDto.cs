@@ -21,6 +21,8 @@ namespace Api.DTOs.Auth
         public int Id { get; set; }
         public string Username { get; set; } = null!;
         public string Email { get; set; } = null!;
+        public string PhoneNumber { get; set; } = null!;
+        public DateOnly? DateOfBirth { get; set; }
         public List<string> Permissions { get; set; } = new();
     }
 }

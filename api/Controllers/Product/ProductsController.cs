@@ -26,18 +26,22 @@ namespace Api.Controllers.Product
             var cached = await _cache.GetAsync<List<ProductResponseDto>>(key);
             if (cached != null) return Ok(cached);
 
-            var products = await _context.Products
+            var productList = await _context.Products
                 .Include(p => p.Category)
-                .Include(p => p.Sizes)
-                .Include(p => p.Colors)
-                .Include(p => p.Types)
-                .Include(p => p.Variants).ThenInclude(v => v.Size)
-                .Include(p => p.Variants).ThenInclude(v => v.Color)
-                .Include(p => p.Variants).ThenInclude(v => v.Type)
-                .Include(p => p.Images)
-                .Select(p => ToResponse(p))
+                .Include(p => p.Details).ThenInclude(d => d.Images)
                 .ToListAsync();
 
+            var discounts = await _context.Discounts.ToListAsync();
+            var now = DateTime.UtcNow;
+            Models.Discount.Discount? GetDiscount(int pid) => discounts
+                .Where(d => d.IsActive && !d.RequireCode
+                    && (d.ProductId == null || d.ProductId == pid)
+                    && (d.StartDate == null || d.StartDate <= now)
+                    && (d.EndDate == null || d.EndDate >= now))
+                .OrderByDescending(d => d.ProductId.HasValue)
+                .FirstOrDefault();
+
+            var products = productList.Select(p => ToResponse(p, GetDiscount(p.Id))).ToList();
             await _cache.SetAsync(key, products, TimeSpan.FromMinutes(5));
             return Ok(products);
         }
@@ -51,17 +55,12 @@ namespace Api.Controllers.Product
 
             var product = await _context.Products
                 .Include(p => p.Category)
-                .Include(p => p.Sizes)
-                .Include(p => p.Colors)
-                .Include(p => p.Types)
-                .Include(p => p.Variants).ThenInclude(v => v.Size)
-                .Include(p => p.Variants).ThenInclude(v => v.Color)
-                .Include(p => p.Variants).ThenInclude(v => v.Type)
-                .Include(p => p.Images)
+                .Include(p => p.Details).ThenInclude(d => d.Images)
                 .FirstOrDefaultAsync(p => p.Id == id);
             if (product == null) return NotFound();
 
-            var response = ToResponse(product);
+            var discount = await GetActiveDiscount(id);
+            var response = ToResponse(product, discount);
             await _cache.SetAsync(key, response, TimeSpan.FromMinutes(5));
             return Ok(response);
         }
@@ -73,19 +72,23 @@ namespace Api.Controllers.Product
             var cached = await _cache.GetAsync<List<ProductResponseDto>>(key);
             if (cached != null) return Ok(cached);
 
-            var products = await _context.Products
+            var productList = await _context.Products
                 .Where(p => p.CategoryId == categoryId)
                 .Include(p => p.Category)
-                .Include(p => p.Sizes)
-                .Include(p => p.Colors)
-                .Include(p => p.Types)
-                .Include(p => p.Variants).ThenInclude(v => v.Size)
-                .Include(p => p.Variants).ThenInclude(v => v.Color)
-                .Include(p => p.Variants).ThenInclude(v => v.Type)
-                .Include(p => p.Images)
-                .Select(p => ToResponse(p))
+                .Include(p => p.Details).ThenInclude(d => d.Images)
                 .ToListAsync();
 
+            var discounts = await _context.Discounts.ToListAsync();
+            var now = DateTime.UtcNow;
+            Models.Discount.Discount? GetDiscount(int pid) => discounts
+                .Where(d => d.IsActive && !d.RequireCode
+                    && (d.ProductId == null || d.ProductId == pid)
+                    && (d.StartDate == null || d.StartDate <= now)
+                    && (d.EndDate == null || d.EndDate >= now))
+                .OrderByDescending(d => d.ProductId.HasValue)
+                .FirstOrDefault();
+
+            var products = productList.Select(p => ToResponse(p, GetDiscount(p.Id))).ToList();
             await _cache.SetAsync(key, products, TimeSpan.FromMinutes(5));
             return Ok(products);
         }
@@ -100,84 +103,11 @@ namespace Api.Controllers.Product
                 Description = dto.Description,
                 BasePrice = dto.BasePrice,
                 CategoryId = dto.CategoryId,
-                Sizes = dto.Sizes.Select(s => new Models.Product.ProductSize { Size = s.Size }).ToList(),
-                Colors = dto.Colors.Select(c => new Models.Product.ProductColor { Color = c.Color }).ToList(),
-                Types = dto.Types.Select(t => new Models.Product.ProductType { Name = t.Name, Description = t.Description }).ToList()
             };
             _context.Products.Add(product);
             await _context.SaveChangesAsync();
-
-            foreach (var v in dto.Variants)
-                _context.ProductVariants.Add(new Models.Product.ProductVariant
-                {
-                    ProductId = product.Id,
-                    SizeId = v.SizeId, ColorId = v.ColorId, TypeId = v.TypeId,
-                    Price = v.Price, Stock = v.Stock
-                });
-            await _context.SaveChangesAsync();
-
             await InvalidateProductCache(product.Id, product.CategoryId);
             return CreatedAtAction(nameof(GetById), new { id = product.Id }, await GetProductResponse(product.Id));
-        }
-
-        [Authorize]
-        [HttpPost("{id}/variants")]
-        public async Task<IActionResult> AddVariant(int id, ProductVariantDto dto)
-        {
-            var product = await _context.Products.FindAsync(id);
-            if (product == null) return NotFound();
-
-            var variant = new Models.Product.ProductVariant
-            {
-                ProductId = id, SizeId = dto.SizeId, ColorId = dto.ColorId,
-                TypeId = dto.TypeId, Price = dto.Price, Stock = dto.Stock
-            };
-            _context.ProductVariants.Add(variant);
-            await _context.SaveChangesAsync();
-            await InvalidateProductCache(id, product.CategoryId);
-            return Ok(variant);
-        }
-
-        [Authorize]
-        [HttpPut("{id}/variants/{variantId}")]
-        public async Task<IActionResult> UpdateVariant(int id, int variantId, ProductVariantDto dto)
-        {
-            var variant = await _context.ProductVariants.FirstOrDefaultAsync(v => v.Id == variantId && v.ProductId == id);
-            if (variant == null) return NotFound();
-            variant.SizeId = dto.SizeId; variant.ColorId = dto.ColorId;
-            variant.TypeId = dto.TypeId; variant.Price = dto.Price; variant.Stock = dto.Stock;
-            await _context.SaveChangesAsync();
-
-            var product = await _context.Products.FindAsync(id);
-            await InvalidateProductCache(id, product!.CategoryId);
-            return NoContent();
-        }
-
-        [Authorize]
-        [HttpPost("{id}/images")]
-        public async Task<IActionResult> AddImage(int id, ProductImageDto dto)
-        {
-            var product = await _context.Products.FindAsync(id);
-            if (product == null) return NotFound();
-
-            if (dto.IsMain)
-                await _context.ProductImages
-                    .Where(i => i.ProductId == id && i.IsMain)
-                    .ExecuteUpdateAsync(i => i.SetProperty(x => x.IsMain, false));
-
-            var image = new Models.Product.ProductImage
-            {
-                ProductId = id, ImageUrl = dto.ImageUrl,
-                IsMain = dto.IsMain, SizeId = dto.SizeId, ColorId = dto.ColorId
-            };
-            _context.ProductImages.Add(image);
-            await _context.SaveChangesAsync();
-            await InvalidateProductCache(id, product.CategoryId);
-            return Ok(new ProductImageResponseDto
-            {
-                Id = image.Id, ImageUrl = image.ImageUrl,
-                IsMain = image.IsMain, SizeId = image.SizeId, ColorId = image.ColorId
-            });
         }
 
         [Authorize]
@@ -186,8 +116,10 @@ namespace Api.Controllers.Product
         {
             var product = await _context.Products.FindAsync(id);
             if (product == null) return NotFound();
-            product.Name = dto.Name; product.Description = dto.Description;
-            product.BasePrice = dto.BasePrice; product.CategoryId = dto.CategoryId;
+            product.Name = dto.Name;
+            product.Description = dto.Description;
+            product.BasePrice = dto.BasePrice;
+            product.CategoryId = dto.CategoryId;
             await _context.SaveChangesAsync();
             await InvalidateProductCache(id, product.CategoryId);
             return NoContent();
@@ -205,29 +137,107 @@ namespace Api.Controllers.Product
             return NoContent();
         }
 
+        // ── ProductDetail ──────────────────────────────────────────
+
+        [Authorize]
+        [HttpPost("{id}/details")]
+        public async Task<IActionResult> AddDetail(int id, ProductDetailDto dto)
+        {
+            var product = await _context.Products.FindAsync(id);
+            if (product == null) return NotFound();
+
+            var detail = new Models.Product.ProductDetail
+            {
+                ProductId = id, Name = dto.Name, Description = dto.Description,
+                Size = dto.Size, Color = dto.Color, CostPrice = dto.CostPrice, Price = dto.Price, Stock = dto.Stock
+            };
+            _context.ProductDetails.Add(detail);
+            await _context.SaveChangesAsync();
+            await InvalidateProductCache(id, product.CategoryId);
+            var discount = await GetActiveDiscount(id);
+            return Ok(ToDetailResponse(detail, discount));
+        }
+
+        [Authorize]
+        [HttpPut("{id}/details/{detailId}")]
+        public async Task<IActionResult> UpdateDetail(int id, int detailId, ProductDetailDto dto)
+        {
+            var detail = await _context.ProductDetails.FirstOrDefaultAsync(d => d.Id == detailId && d.ProductId == id);
+            if (detail == null) return NotFound();
+            detail.Name = dto.Name; detail.Description = dto.Description;
+            detail.Size = dto.Size; detail.Color = dto.Color;
+            detail.CostPrice = dto.CostPrice; detail.Price = dto.Price; detail.Stock = dto.Stock;
+            await _context.SaveChangesAsync();
+            var product = await _context.Products.FindAsync(id);
+            await InvalidateProductCache(id, product!.CategoryId);
+            return NoContent();
+        }
+
+        [Authorize]
+        [HttpDelete("{id}/details/{detailId}")]
+        public async Task<IActionResult> DeleteDetail(int id, int detailId)
+        {
+            var detail = await _context.ProductDetails.FirstOrDefaultAsync(d => d.Id == detailId && d.ProductId == id);
+            if (detail == null) return NotFound();
+            _context.ProductDetails.Remove(detail);
+            await _context.SaveChangesAsync();
+            var product = await _context.Products.FindAsync(id);
+            await InvalidateProductCache(id, product?.CategoryId);
+            return NoContent();
+        }
+
+        // ── ProductImage ───────────────────────────────────────────
+
+        [Authorize]
+        [HttpPost("{id}/details/{detailId}/images")]
+        public async Task<IActionResult> AddImage(int id, int detailId, ProductImageDto dto)
+        {
+            var detail = await _context.ProductDetails
+                .Include(d => d.Images)
+                .FirstOrDefaultAsync(d => d.Id == detailId && d.ProductId == id);
+            if (detail == null) return NotFound();
+
+            if (dto.IsMain)
+                await _context.ProductImages
+                    .Where(i => i.ProductDetailId == detailId && i.IsMain)
+                    .ExecuteUpdateAsync(i => i.SetProperty(x => x.IsMain, false));
+
+            var image = new Models.Product.ProductImage
+            {
+                ProductDetailId = detailId, ImageUrl = dto.ImageUrl, IsMain = dto.IsMain
+            };
+            _context.ProductImages.Add(image);
+            await _context.SaveChangesAsync();
+            var product = await _context.Products.FindAsync(id);
+            await InvalidateProductCache(id, product?.CategoryId);
+            return Ok(new ProductImageResponseDto { Id = image.Id, ImageUrl = image.ImageUrl, IsMain = image.IsMain });
+        }
+
         [Authorize]
         [HttpDelete("images/{imageId}")]
         public async Task<IActionResult> DeleteImage(int imageId)
         {
             var image = await _context.ProductImages.FindAsync(imageId);
             if (image == null) return NotFound();
+            var detail = await _context.ProductDetails.FindAsync(image.ProductDetailId);
             _context.ProductImages.Remove(image);
             await _context.SaveChangesAsync();
-            await InvalidateProductCache(image.ProductId, null);
+            if (detail != null) await InvalidateProductCache(detail.ProductId, null);
             return NoContent();
         }
 
-        [Authorize]
-        [HttpDelete("{id}/variants/{variantId}")]
-        public async Task<IActionResult> DeleteVariant(int id, int variantId)
+        // ── Helpers ────────────────────────────────────────────────
+
+        private async Task<Models.Discount.Discount?> GetActiveDiscount(int productId)
         {
-            var variant = await _context.ProductVariants.FirstOrDefaultAsync(v => v.Id == variantId && v.ProductId == id);
-            if (variant == null) return NotFound();
-            _context.ProductVariants.Remove(variant);
-            await _context.SaveChangesAsync();
-            var product = await _context.Products.FindAsync(id);
-            await InvalidateProductCache(id, product?.CategoryId);
-            return NoContent();
+            var now = DateTime.UtcNow;
+            return await _context.Discounts
+                .Where(d => d.IsActive && !d.RequireCode
+                    && (d.ProductId == null || d.ProductId == productId)
+                    && (d.StartDate == null || d.StartDate <= now)
+                    && (d.EndDate == null || d.EndDate >= now))
+                .OrderByDescending(d => d.ProductId.HasValue) // ưu tiên discount riêng cho product
+                .FirstOrDefaultAsync();
         }
 
         private async Task InvalidateProductCache(int productId, int? categoryId)
@@ -241,35 +251,46 @@ namespace Api.Controllers.Product
         private async Task<ProductResponseDto> GetProductResponse(int id)
         {
             var product = await _context.Products
-                .Include(p => p.Category).Include(p => p.Sizes).Include(p => p.Colors)
-                .Include(p => p.Types)
-                .Include(p => p.Variants).ThenInclude(v => v.Size)
-                .Include(p => p.Variants).ThenInclude(v => v.Color)
-                .Include(p => p.Variants).ThenInclude(v => v.Type)
-                .Include(p => p.Images)
+                .Include(p => p.Category)
+                .Include(p => p.Details).ThenInclude(d => d.Images)
                 .FirstOrDefaultAsync(p => p.Id == id);
-            return ToResponse(product!);
+            var discount = await GetActiveDiscount(id);
+            return ToResponse(product!, discount);
         }
 
-        private static ProductResponseDto ToResponse(Models.Product.Product p) => new()
+        private static decimal ApplyDiscount(decimal basePrice, Models.Discount.Discount? d)
+        {
+            if (d == null) return basePrice;
+            var now = DateTime.UtcNow;
+            if (!d.IsActive || d.RequireCode) return basePrice;
+            if (d.StartDate.HasValue && now < d.StartDate) return basePrice;
+            if (d.EndDate.HasValue && now > d.EndDate) return basePrice;
+            var discount = d.Type == "percent"
+                ? basePrice * d.Value / 100
+                : d.Value;
+            if (d.MaxDiscount.HasValue && discount > d.MaxDiscount.Value) discount = d.MaxDiscount.Value;
+            return Math.Max(0, basePrice - discount);
+        }
+
+        private static ProductDetailResponseDto ToDetailResponse(Models.Product.ProductDetail d, Models.Discount.Discount? discount)
+        {
+            var baseForDetail = d.Price ?? d.Product?.BasePrice ?? 0;
+            return new()
+            {
+                Id = d.Id, Name = d.Name, Description = d.Description,
+                Size = d.Size, Color = d.Color, CostPrice = d.CostPrice, Price = d.Price,
+                SalePrice = ApplyDiscount(baseForDetail, discount),
+                Stock = d.Stock,
+                Images = d.Images.Select(i => new ProductImageResponseDto { Id = i.Id, ImageUrl = i.ImageUrl, IsMain = i.IsMain }).ToList()
+            };
+        }
+
+        private static ProductResponseDto ToResponse(Models.Product.Product p, Models.Discount.Discount? discount) => new()
         {
             Id = p.Id, Name = p.Name, Description = p.Description,
-            BasePrice = p.BasePrice, Category = p.Category?.Name ?? "", CreatedAt = p.CreatedAt,
-            Sizes = p.Sizes.Select(s => new ProductSizeResponseDto { Id = s.Id, Size = s.Size }).ToList(),
-            Colors = p.Colors.Select(c => new ProductColorResponseDto { Id = c.Id, Color = c.Color }).ToList(),
-            Types = p.Types.Select(t => new ProductTypeResponseDto { Id = t.Id, Name = t.Name, Description = t.Description }).ToList(),
-            Variants = p.Variants.Select(v => new ProductVariantResponseDto
-            {
-                Id = v.Id, SizeId = v.SizeId, Size = v.Size?.Size,
-                ColorId = v.ColorId, Color = v.Color?.Color,
-                TypeId = v.TypeId, Type = v.Type?.Name,
-                Price = v.Price, Stock = v.Stock
-            }).ToList(),
-            Images = p.Images.Select(i => new ProductImageResponseDto
-            {
-                Id = i.Id, ImageUrl = i.ImageUrl, IsMain = i.IsMain,
-                SizeId = i.SizeId, ColorId = i.ColorId
-            }).ToList()
+            BasePrice = p.BasePrice, SalePrice = ApplyDiscount(p.BasePrice, discount),
+            CategoryId = p.CategoryId, Category = p.Category?.Name ?? "", CreatedAt = p.CreatedAt,
+            Details = p.Details.Select(d => ToDetailResponse(d, discount)).ToList()
         };
     }
 }

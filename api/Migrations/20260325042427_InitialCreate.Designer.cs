@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace api.Migrations
 {
     [DbContext(typeof(DBContext))]
-    [Migration("20260320035424_passwordchange")]
-    partial class passwordchange
+    [Migration("20260325042427_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -254,7 +254,7 @@ namespace api.Migrations
                     b.ToTable("Products");
                 });
 
-            modelBuilder.Entity("Api.Models.Product.ProductColor", b =>
+            modelBuilder.Entity("Api.Models.Product.ProductDetail", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -263,17 +263,32 @@ namespace api.Migrations
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Color")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<decimal?>("Price")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Size")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("Stock")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ProductId");
 
-                    b.ToTable("ProductColors");
+                    b.ToTable("ProductDetails");
                 });
 
             modelBuilder.Entity("Api.Models.Product.ProductImage", b =>
@@ -284,9 +299,6 @@ namespace api.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("ColorId")
-                        .HasColumnType("int");
-
                     b.Property<string>("ImageUrl")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -294,107 +306,14 @@ namespace api.Migrations
                     b.Property<bool>("IsMain")
                         .HasColumnType("tinyint(1)");
 
-                    b.Property<int>("ProductId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("SizeId")
+                    b.Property<int>("ProductDetailId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ColorId");
-
-                    b.HasIndex("ProductId");
-
-                    b.HasIndex("SizeId");
+                    b.HasIndex("ProductDetailId");
 
                     b.ToTable("ProductImages");
-                });
-
-            modelBuilder.Entity("Api.Models.Product.ProductSize", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ProductId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Size")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProductId");
-
-                    b.ToTable("ProductSizes");
-                });
-
-            modelBuilder.Entity("Api.Models.Product.ProductType", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Description")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("ProductId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProductId");
-
-                    b.ToTable("ProductTypes");
-                });
-
-            modelBuilder.Entity("Api.Models.Product.ProductVariant", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("ColorId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("Price")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("ProductId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("SizeId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Stock")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("TypeId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ColorId");
-
-                    b.HasIndex("ProductId");
-
-                    b.HasIndex("SizeId");
-
-                    b.HasIndex("TypeId");
-
-                    b.ToTable("ProductVariants");
                 });
 
             modelBuilder.Entity("Api.Models.User.User", b =>
@@ -457,10 +376,10 @@ namespace api.Migrations
                     b.Navigation("Category");
                 });
 
-            modelBuilder.Entity("Api.Models.Product.ProductColor", b =>
+            modelBuilder.Entity("Api.Models.Product.ProductDetail", b =>
                 {
                     b.HasOne("Api.Models.Product.Product", "Product")
-                        .WithMany("Colors")
+                        .WithMany("Details")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -470,76 +389,13 @@ namespace api.Migrations
 
             modelBuilder.Entity("Api.Models.Product.ProductImage", b =>
                 {
-                    b.HasOne("Api.Models.Product.ProductColor", "Color")
+                    b.HasOne("Api.Models.Product.ProductDetail", "ProductDetail")
                         .WithMany("Images")
-                        .HasForeignKey("ColorId");
-
-                    b.HasOne("Api.Models.Product.Product", "Product")
-                        .WithMany("Images")
-                        .HasForeignKey("ProductId")
+                        .HasForeignKey("ProductDetailId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Api.Models.Product.ProductSize", "Size")
-                        .WithMany("Images")
-                        .HasForeignKey("SizeId");
-
-                    b.Navigation("Color");
-
-                    b.Navigation("Product");
-
-                    b.Navigation("Size");
-                });
-
-            modelBuilder.Entity("Api.Models.Product.ProductSize", b =>
-                {
-                    b.HasOne("Api.Models.Product.Product", "Product")
-                        .WithMany("Sizes")
-                        .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Product");
-                });
-
-            modelBuilder.Entity("Api.Models.Product.ProductType", b =>
-                {
-                    b.HasOne("Api.Models.Product.Product", "Product")
-                        .WithMany("Types")
-                        .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Product");
-                });
-
-            modelBuilder.Entity("Api.Models.Product.ProductVariant", b =>
-                {
-                    b.HasOne("Api.Models.Product.ProductColor", "Color")
-                        .WithMany("Variants")
-                        .HasForeignKey("ColorId");
-
-                    b.HasOne("Api.Models.Product.Product", "Product")
-                        .WithMany("Variants")
-                        .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Api.Models.Product.ProductSize", "Size")
-                        .WithMany("Variants")
-                        .HasForeignKey("SizeId");
-
-                    b.HasOne("Api.Models.Product.ProductType", "Type")
-                        .WithMany("Variants")
-                        .HasForeignKey("TypeId");
-
-                    b.Navigation("Color");
-
-                    b.Navigation("Product");
-
-                    b.Navigation("Size");
-
-                    b.Navigation("Type");
+                    b.Navigation("ProductDetail");
                 });
 
             modelBuilder.Entity("Api.Models.Auth.Permission", b =>
@@ -554,34 +410,12 @@ namespace api.Migrations
 
             modelBuilder.Entity("Api.Models.Product.Product", b =>
                 {
-                    b.Navigation("Colors");
-
-                    b.Navigation("Images");
-
-                    b.Navigation("Sizes");
-
-                    b.Navigation("Types");
-
-                    b.Navigation("Variants");
+                    b.Navigation("Details");
                 });
 
-            modelBuilder.Entity("Api.Models.Product.ProductColor", b =>
+            modelBuilder.Entity("Api.Models.Product.ProductDetail", b =>
                 {
                     b.Navigation("Images");
-
-                    b.Navigation("Variants");
-                });
-
-            modelBuilder.Entity("Api.Models.Product.ProductSize", b =>
-                {
-                    b.Navigation("Images");
-
-                    b.Navigation("Variants");
-                });
-
-            modelBuilder.Entity("Api.Models.Product.ProductType", b =>
-                {
-                    b.Navigation("Variants");
                 });
 
             modelBuilder.Entity("Api.Models.User.User", b =>
